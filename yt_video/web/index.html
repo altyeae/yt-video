@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>yt-video</title>
+  <style>
+    body { margin: 16px; }
+    .page { display: flex; flex-direction: column; gap: 16px; }
+    .row { display: flex; gap: 12px; align-items: center; }
+    .grow { flex: 1; min-width: 0; }
+    .split { display: flex; gap: 24px; align-items: flex-start; }
+    .col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+    ul { margin: 0; padding-left: 1.2em; }
+    .box { height: 320px; margin: 0; overflow: auto; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div>yt-video</div>
+    <div id="keys"></div>
+    <form id="form" class="row">
+      <input id="topic" class="grow" type="text" placeholder="Тема">
+      <select id="language">
+        <option value="ru">Русский</option>
+        <option value="en">English</option>
+      </select>
+      <select id="channel"></select>
+      <select id="length">
+        <option value="long">10–15 мин</option>
+        <option value="normal">1,5 мин</option>
+        <option value="short">30 с тест</option>
+      </select>
+      <select id="aspect">
+        <option value="16:9">16:9</option>
+        <option value="9:16">9:16</option>
+      </select>
+      <button type="submit">Собрать</button>
+      <button type="button" id="resume">Продолжить</button>
+    </form>
+    <div class="split">
+      <section class="col">
+        <div>Стадии</div>
+        <ul id="stages"></ul>
+        <div>Сценарий</div>
+        <pre id="script" class="box"></pre>
+      </section>
+      <section class="col">
+        <div>Журнал</div>
+        <pre id="log" class="box"></pre>
+        <div id="result"></div>
+      </section>
+    </div>
+  </div>
+  <script>
+    const stagesEl = document.getElementById("stages");
+    const logEl = document.getElementById("log");
+    const scriptEl = document.getElementById("script");
+    const keysEl = document.getElementById("keys");
+    const resultEl = document.getElementById("result");
+    const button = document.querySelector("button");
+    const labels = { wait: "ждёт", running: "идёт", done: "готово", error: "ошибка" };
+    const keyNames = {
+      gemini: "Gemini",
+      elevenlabs: "ElevenLabs",
+      epidemic: "Epidemic",
+      pexels: "Pexels"
+    };
+
+    function render(data) {
+      const parts = Object.keys(keyNames).map(function (key) {
+        return keyNames[key] + " " + (data.keys[key] ? "есть" : "нет");
+      });
+      keysEl.textContent = parts.join(", ");
+      const channelEl = document.getElementById("channel");
+      if (!channelEl.options.length && data.channels) {
+        data.channels.forEach(function (name) {
+          const option = document.createElement("option");
+          option.value = name;
+          option.textContent = name;
+          option.selected = name === data.channel;
+          channelEl.appendChild(option);
+        });
+      }
+      stagesEl.replaceChildren();
+      data.stages.forEach(function (stage) {
+        const item = document.createElement("li");
+        item.textContent = stage.label + " — " + (labels[stage.status] || stage.status);
+        stagesEl.appendChild(item);
+      });
+      scriptEl.textContent = data.script || "";
+      logEl.textContent = (data.log || []).join("\n");
+      logEl.scrollTop = logEl.scrollHeight;
+      resultEl.replaceChildren();
+      if (data.result) {
+        resultEl.appendChild(document.createTextNode(data.result));
+      }
+      if (data.error) {
+        if (data.result) {
+          resultEl.appendChild(document.createTextNode(" "));
+        }
+        resultEl.appendChild(document.createTextNode(data.error));
+      }
+      button.disabled = data.status === "running";
+    }
+
+    async function tick() {
+      const response = await fetch("/api/state");
+      render(await response.json());
+    }
+
+    document.getElementById("resume").addEventListener("click", async function () {
+      const response = await fetch("/api/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resume: true })
+      });
+      if (!response.ok) {
+        const payload = await response.json();
+        resultEl.textContent = payload.error || "ошибка";
+      }
+      tick();
+    });
+
+    document.getElementById("form").addEventListener("submit", async function (event) {
+      event.preventDefault();
+      const response = await fetch("/api/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          topic: document.getElementById("topic").value,
+          language: document.getElementById("language").value,
+          aspect: document.getElementById("aspect").value,
+          length: document.getElementById("length").value,
+          channel: document.getElementById("channel").value
+        })
+      });
+      if (!response.ok) {
+        const payload = await response.json();
+        resultEl.textContent = payload.error || "ошибка";
+      }
+      tick();
+    });
+
+    tick();
+    setInterval(tick, 800);
+  </script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+.env
+README.md
+topics.md
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+projects/
+cache/
+# licensed sound effects: they belong to the owner's Epidemic Sound account
+sfx_library/
